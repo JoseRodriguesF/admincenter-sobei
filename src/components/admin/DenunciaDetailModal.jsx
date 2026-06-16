@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useDenunciaDetalhes } from '@/hooks/useDenuncias';
+import CustomSelect from './CustomSelect';
 
 function formatarData(dataStr) {
   if (!dataStr) return '';
@@ -106,12 +107,14 @@ export default function DenunciaDetailModal({ denuncia, status, onClose, onActio
   const [relatorioFinal, setRelatorioFinal] = useState('');
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [tipoConclusaoLocal, setTipoConclusaoLocal] = useState('FINAL'); // 'FINAL' or 'ARQUIVAMENTO'
+  const [prioridadeLocal, setPrioridadeLocal] = useState('NEUTRA');
 
   useEffect(() => {
     const display = mergeDenunciaData(denuncia, detalhes);
     setTimeout(() => {
       setMedidasList(normalizeMedidasList(display.medidasAdotadas));
       setRelatorioFinal(display.relatorioConclusao || '');
+      setPrioridadeLocal(display.prioridade || 'NEUTRA');
     }, 0);
   }, [denuncia, detalhes]);
 
@@ -125,6 +128,7 @@ export default function DenunciaDetailModal({ denuncia, status, onClose, onActio
         status: 'em_andamento',
         dataAbertura: new Date().toLocaleDateString('pt-BR'),
         ultimaAlteracao: new Date().toLocaleDateString('pt-BR'),
+        prioridade: prioridadeLocal,
       },
     });
   }
@@ -151,6 +155,7 @@ export default function DenunciaDetailModal({ denuncia, status, onClose, onActio
     setNovaMedida('');
   }
 
+  // Permite salvar prioridade mesmo que não mude status
   function handleSalvar() {
     const finalMedidas = [...medidasList];
     if (novaMedida.trim()) {
@@ -160,7 +165,8 @@ export default function DenunciaDetailModal({ denuncia, status, onClose, onActio
       protocolo: denuncia.protocolo,
       data: {
         status: 'em_andamento',
-        medidas: finalMedidas
+        medidas: finalMedidas,
+        prioridade: prioridadeLocal,
       },
     });
     setNovaMedida('');
@@ -240,7 +246,6 @@ export default function DenunciaDetailModal({ denuncia, status, onClose, onActio
               className="btn btn--outline"
               onClick={() => setConfirmingClose(false)}
               type="button"
-              style={{ border: '1px solid var(--color-gray-300)', backgroundColor: 'transparent', color: 'var(--color-gray-700)', padding: '8px 24px', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
             >
               Voltar
             </button>
@@ -277,6 +282,29 @@ export default function DenunciaDetailModal({ denuncia, status, onClose, onActio
                 <p><strong>Protocolo:</strong> {displayDenuncia.protocolo}</p>
                 <p><strong>Unidade:</strong> {displayDenuncia.unidade}</p>
                 <p><strong>Tipo de denuncia:</strong> Denúncia {tipoDenunciaFormatado}</p>
+                <p style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
+                  <strong>Prioridade:</strong>
+                  {(status === 'na_fila' || status === 'em_andamento') ? (
+                    <div style={{ width: '140px' }}>
+                      <CustomSelect
+                        value={prioridadeLocal}
+                        onChange={setPrioridadeLocal}
+                        defaultOption="Selecione..."
+                        className={`priority-select priority-badge--${prioridadeLocal.toLowerCase()}`}
+                        options={[
+                          { value: 'NEUTRA', label: 'Neutra' },
+                          { value: 'BAIXA', label: 'Baixa' },
+                          { value: 'MEDIA', label: 'Média' },
+                          { value: 'ALTA', label: 'Alta' }
+                        ]}
+                      />
+                    </div>
+                  ) : (
+                    <span className={`priority-badge priority-badge--${(displayDenuncia.prioridade || 'neutra').toLowerCase()}`}>
+                      {displayDenuncia.prioridade === 'ALTA' ? 'Alta' : displayDenuncia.prioridade === 'MEDIA' ? 'Média' : displayDenuncia.prioridade === 'BAIXA' ? 'Baixa' : 'Neutra'}
+                    </span>
+                  )}
+                </p>
                 <p><strong>Data de envio:</strong> {formatarData(displayDenuncia.dataEnvio)}</p>
                 {status === 'fechada' && displayDenuncia.dataFechamento && (
                   <p><strong>Data de fechamento:</strong> {formatarData(displayDenuncia.dataFechamento)}</p>

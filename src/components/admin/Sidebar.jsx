@@ -40,7 +40,6 @@ export default function Sidebar() {
       </Link>
 
       <nav className="sidebar__nav">
-        <div className="sidebar__divider" />
 
         {/* Denúncias section */}
         <div className="sidebar__section">
@@ -127,7 +126,6 @@ export default function Sidebar() {
         <button
           onClick={handleLogout}
           className="sidebar__link"
-          style={{ color: 'var(--color-red)' }}
           type="button"
         >
           <Image 
@@ -136,7 +134,6 @@ export default function Sidebar() {
             width={20} 
             height={20} 
             className="sidebar__icon" 
-            style={{ filter: 'invert(20%) sepia(85%) saturate(6669%) hue-rotate(354deg) brightness(96%) contrast(92%)' }}
           />
           <span className="sidebar__text" style={{ fontWeight: 'var(--font-weight-bold)' }}>Sair da Conta</span>
         </button>

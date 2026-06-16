@@ -108,6 +108,54 @@
   box-shadow: 0 4px 16px rgba(124, 107, 196, 0.3);
 }
 
+.btn--blue {
+  background-color: var(--color-primary);
+  color: var(--color-white);
+  font-weight: var(--font-weight-semibold);
+  border-color: var(--color-primary);
+}
+
+.btn--blue:hover {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary-light);
+  box-shadow: 0 4px 16px rgba(27, 20, 100, 0.25);
+}
+
+/* ---- Badges de Prioridade ---- */
+.priority-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1.2;
+}
+
+.priority-badge--baixa {
+  background-color: rgba(67, 160, 71, 0.15) !important;
+  color: var(--color-green) !important;
+}
+
+.priority-badge--neutra {
+  background-color: var(--color-gray-200) !important;
+  color: var(--color-gray-700) !important;
+}
+
+.priority-badge--media {
+  background-color: rgba(255, 152, 0, 0.15) !important;
+  color: var(--color-orange) !important;
+}
+
+.priority-badge--alta {
+  background-color: rgba(229, 57, 53, 0.15) !important;
+  color: var(--color-red) !important;
+}
+
+
 .btn--sm {
   padding: var(--spacing-sm) var(--spacing-base);
   font-size: var(--font-size-sm);
@@ -431,6 +479,34 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* Priority Select Specific Styles */
+.priority-select {
+  border-radius: var(--radius-full);
+}
+
+.priority-select .custom-select-trigger {
+  background-color: transparent;
+  border-color: transparent;
+  min-height: 32px;
+  padding: 4px 12px;
+  font-weight: var(--font-weight-bold);
+  color: inherit;
+}
+
+.priority-select .custom-select-dropdown {
+  background-color: var(--color-white);
+}
+
+.priority-select .custom-select-option {
+  font-weight: var(--font-weight-bold);
+}
+
+.priority-select .custom-select-option:nth-child(2) { color: var(--color-gray-700); } /* Neutra */
+.priority-select .custom-select-option:nth-child(3) { color: var(--color-green); } /* Baixa */
+.priority-select .custom-select-option:nth-child(4) { color: var(--color-orange); } /* Media */
+.priority-select .custom-select-option:nth-child(5) { color: var(--color-red); } /* Alta */
+
+
 /* ---- Custom Date Picker ---- */
 .custom-datepicker-container {
   position: relative;
@@ -559,4 +635,19 @@
 
 .custom-datepicker-action:hover {
   background-color: rgba(27, 20, 100, 0.06);
+}
+
+@media (max-width: 600px) {
+  .btn {
+    white-space: normal;
+    line-height: 1.4;
+  }
+  .form-card .btn {
+    width: 100%;
+    padding: var(--spacing-md) var(--spacing-lg);
+  }
+  .form-card .btn--lg {
+    padding: var(--spacing-md) var(--spacing-xl);
+    font-size: var(--font-size-base);
+  }
 }
