@@ -164,9 +164,18 @@ function normalizeDenunciasList(raw) {
 }
 
 function getAuthHeaders() {
-  return {
+  const headers = {
     'Content-Type': 'application/json'
   };
+
+  if (typeof window !== 'undefined') {
+    const token = sessionStorage.getItem('sobei_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+
+  return headers;
 }
 
 // ---- API Pública ----
@@ -289,6 +298,7 @@ export async function fetchDenunciasPorStatus(status, filtros = {}) {
     if (filtros.tipo) url.searchParams.append('tipo', filtros.tipo.toUpperCase());
     if (filtros.unidade) url.searchParams.append('unidade', filtros.unidade);
     if (filtros.ordem) url.searchParams.append('ordem', filtros.ordem);
+    if (filtros.prioridadeOrdem) url.searchParams.append('prioridadeOrdem', filtros.prioridadeOrdem);
 
     const response = await fetch(url, { headers: getAuthHeaders(), credentials: 'include' });
     
@@ -450,6 +460,7 @@ export async function logoutAdmin() {
   try {
     await fetch(`${API_BASE_URL}/admin/auth/logout`, {
       method: 'POST',
+      headers: getAuthHeaders(),
       credentials: 'include',
     });
     return { success: true };
@@ -461,6 +472,7 @@ export async function logoutAdmin() {
 export async function fetchMe() {
   try {
     const response = await fetch(`${API_BASE_URL}/admin/auth/me`, {
+      headers: getAuthHeaders(),
       credentials: 'include',
     });
     if (!response.ok) return null;
