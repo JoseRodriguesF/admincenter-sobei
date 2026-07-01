@@ -4,40 +4,86 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchVagas, criarVaga, atualizarVaga, fetchCandidaturas, downloadCurriculo, visualizarCurriculo } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { UNIDADES } from '@/lib/mockData';
+import CustomSelect from '@/components/admin/CustomSelect';
 
 const STATUS_LABELS = {
-  aberta: 'Aberta',
-  pausada: 'Pausada',
-  fechada: 'Fechada',
+  ativo: 'Ativo',
+  em_selecao: 'Em Seleção',
+  fechado: 'Fechado',
 };
 
 const STATUS_COLORS = {
-  aberta: 'var(--color-success, #22c55e)',
-  pausada: 'var(--color-warning, #f59e0b)',
-  fechada: 'var(--color-danger, #ef4444)',
+  ativo: 'var(--color-success, #22c55e)',
+  em_selecao: 'var(--color-warning, #f59e0b)',
+  fechado: 'var(--color-danger, #ef4444)',
 };
 
 const MODALIDADE_LABELS = {
   presencial: 'Presencial',
-  hibrido: 'Híbrido',
-  remoto: 'Remoto',
 };
 
 const CONTRATO_LABELS = {
   clt: 'CLT',
-  estagio: 'Estágio',
   pj: 'PJ',
-  temporario: 'Temporário',
+  jovem_aprendiz: 'Jovem Aprendiz',
+};
+
+const getAvailableTitles = (unidade, currentTitle) => {
+  if (!unidade) return [];
+  const u = unidade.toLowerCase();
+  
+  let titles = [];
+  if (u.includes('nci')) {
+    titles = [
+      'Psicólogo',
+      'Assistente Social',
+      'Técnico Socioeducativo',
+      'Coordenador',
+      'Gerente',
+      'Auxiliar de Cozinha e Limpeza',
+      'Cozinheira'
+    ];
+  } else if (['ccinter', 'cedesp', 'telecentro', 'matriz'].includes(u)) {
+    titles = [
+      'Técnico Socioeducativo',
+      'Coordenador',
+      'Gerente',
+      'Auxiliar de Cozinha e Limpeza',
+      'Cozinheira'
+    ];
+  } else {
+    // CEI (qualquer outra unidade como Acácias, Araucárias, Imbuias, etc.)
+    titles = [
+      'Diretora Pedagógica',
+      'Coordenadora Pedagógica',
+      'Técnico de Enfermagem',
+      'Auxiliar de Desenvolvimento Infantil',
+      'Professora',
+      'Auxiliar de Limpeza',
+      'Auxiliar de Cozinha',
+      'Auxiliar de Manutenção',
+      'Jovem Aprendiz',
+      'Cozinheira'
+    ];
+  }
+
+  if (currentTitle && !titles.includes(currentTitle)) {
+    titles.push(currentTitle);
+  }
+
+  return titles;
 };
 
 const INITIAL_FORM = {
   titulo: '',
-  departamento: '',
+  departamento: 'Geral',
   descricao: '',
   requisitos: '',
   beneficios: '',
   modalidade: 'presencial',
   tipoContrato: 'clt',
+  unidade: '',
+  status: 'ativo',
 };
 
 export default function VagasPage() {
@@ -69,12 +115,23 @@ export default function VagasPage() {
   }, [statusFilter, unidadeFilter]);
 
   useEffect(() => {
-    loadVagas();
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) {
+        loadVagas();
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, [loadVagas]);
 
   const handleOpenCreate = () => {
     setEditingVaga(null);
-    setFormData(INITIAL_FORM);
+    setFormData({
+      ...INITIAL_FORM,
+      unidade: user?.nivel === 'diretora' ? (user?.unidade || '') : '',
+    });
     setFormError('');
     setShowFormModal(true);
   };
@@ -89,6 +146,8 @@ export default function VagasPage() {
       beneficios: vaga.beneficios || '',
       modalidade: vaga.modalidade,
       tipoContrato: vaga.tipoContrato,
+      unidade: vaga.unidade || '',
+      status: vaga.status,
     });
     setFormError('');
     setShowDetailModal(false);
@@ -109,13 +168,23 @@ export default function VagasPage() {
   const handleSubmitForm = async (e) => {
     e.preventDefault();
     setFormError('');
+
+    if (user?.nivel === 'suporte' && !formData.unidade) {
+      setFormError('A unidade é obrigatória');
+      return;
+    }
+    if (!formData.titulo) {
+      setFormError('O título da vaga é obrigatório');
+      return;
+    }
+
     setSubmitting(true);
 
     let result;
     if (editingVaga) {
       result = await atualizarVaga(editingVaga.id, {
         ...formData,
-        status: editingVaga.status,
+        status: formData.status || editingVaga.status,
       });
     } else {
       result = await criarVaga(formData);
@@ -140,6 +209,7 @@ export default function VagasPage() {
       modalidade: vaga.modalidade,
       tipoContrato: vaga.tipoContrato,
       status: newStatus,
+      unidade: vaga.unidade,
     });
 
     if (result.success) {
@@ -179,8 +249,8 @@ export default function VagasPage() {
             )}
           </p>
         </div>
-        {user?.nivel === 'diretora' && (
-          <button className="vagas-admin__btn-create" onClick={handleOpenCreate}>
+        {(user?.nivel === 'diretora' || user?.nivel === 'suporte') && (
+          <button className="btn btn--secondary" onClick={handleOpenCreate}>
             + Nova Vaga
           </button>
         )}
@@ -209,25 +279,13 @@ export default function VagasPage() {
         {user?.nivel === 'suporte' && (
           <div className="vagas-admin__unit-filter" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '14px', fontWeight: '500', color: 'var(--color-text-secondary)' }}>Filtrar por Unidade:</span>
-            <select
+            <CustomSelect
               value={unidadeFilter}
-              onChange={(e) => setUnidadeFilter(e.target.value)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: '1px solid var(--color-border)',
-                backgroundColor: 'var(--color-background-elevated, #fff)',
-                color: 'var(--color-text-primary)',
-                fontSize: '14px',
-                outline: 'none',
-                minWidth: '180px'
-              }}
-            >
-              <option value="">Todas as Unidades</option>
-              {UNIDADES.map((u) => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
+              onChange={setUnidadeFilter}
+              options={UNIDADES.map((u) => ({ value: u, label: u }))}
+              defaultOption="Todas as Unidades"
+              style={{ minWidth: '220px' }}
+            />
           </div>
         )}
       </div>
@@ -238,8 +296,8 @@ export default function VagasPage() {
       ) : vagas.length === 0 ? (
         <div className="vagas-admin__empty">
           <p>Nenhuma vaga encontrada.</p>
-          {user?.nivel === 'diretora' && (
-            <button className="vagas-admin__btn-create" onClick={handleOpenCreate}>
+          {(user?.nivel === 'diretora' || user?.nivel === 'suporte') && (
+            <button className="btn btn--secondary" onClick={handleOpenCreate}>
               Criar primeira vaga
             </button>
           )}
@@ -263,7 +321,7 @@ export default function VagasPage() {
               </div>
               <h3 className="vaga-card__title">{vaga.titulo}</h3>
               <p className="vaga-card__dept">
-                {vaga.departamento} {user?.nivel === 'suporte' && `• ${vaga.unidade}`}
+                📍 {vaga.unidade}
               </p>
               <div className="vaga-card__footer">
                 <span className="vaga-card__tag">
@@ -281,104 +339,195 @@ export default function VagasPage() {
       {/* Modal Criar/Editar */}
       {showFormModal && (
         <div className="vagas-modal__overlay" onClick={() => setShowFormModal(false)}>
-          <div className="vagas-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="vagas-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '1100px', width: '95%' }}>
             <div className="vagas-modal__header">
               <h2>{editingVaga ? 'Editar Vaga' : 'Nova Vaga'}</h2>
               <button className="vagas-modal__close" onClick={() => setShowFormModal(false)}>✕</button>
             </div>
 
-            <form onSubmit={handleSubmitForm} className="vagas-modal__form">
-              <div className="vagas-form__group">
-                <label>Título da Vaga *</label>
-                <input
-                  type="text"
-                  value={formData.titulo}
-                  onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                  placeholder="Ex: Educador Social"
-                  required
-                />
-              </div>
+            <div className="vagas-modal__split-container">
+              {/* Left Column: Form Fields */}
+              <form onSubmit={handleSubmitForm} className="vagas-modal__form-col">
+                {user?.nivel === 'suporte' && (
+                  <div className="vagas-form__group">
+                    <label>Unidade *</label>
+                    <CustomSelect
+                      value={formData.unidade}
+                      onChange={(val) => setFormData({ ...formData, unidade: val, titulo: '' })}
+                      options={UNIDADES.map((u) => ({ value: u, label: u }))}
+                      defaultOption="Selecione a unidade..."
+                      allowEmpty={false}
+                    />
+                  </div>
+                )}
 
-              <div className="vagas-form__group">
-                <label>Departamento / Área *</label>
-                <input
-                  type="text"
-                  value={formData.departamento}
-                  onChange={(e) => setFormData({ ...formData, departamento: e.target.value })}
-                  placeholder="Ex: Pedagógico"
-                  required
-                />
-              </div>
-
-              <div className="vagas-form__row">
                 <div className="vagas-form__group">
-                  <label>Modalidade *</label>
-                  <select
-                    value={formData.modalidade}
-                    onChange={(e) => setFormData({ ...formData, modalidade: e.target.value })}
-                  >
-                    {Object.entries(MODALIDADE_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
+                  <label>Título da Vaga *</label>
+                  <CustomSelect
+                    value={formData.titulo}
+                    onChange={(val) => setFormData({ ...formData, titulo: val })}
+                    options={getAvailableTitles(formData.unidade, editingVaga?.titulo).map((t) => ({ value: t, label: t }))}
+                    defaultOption="Selecione a vaga..."
+                    allowEmpty={false}
+                  />
+                </div>
+
+
+
+                <div className="vagas-form__row">
+                  <div className="vagas-form__group">
+                    <label>Modalidade *</label>
+                    <CustomSelect
+                      value={formData.modalidade}
+                      onChange={(val) => setFormData({ ...formData, modalidade: val })}
+                      options={Object.entries(MODALIDADE_LABELS).map(([key, label]) => ({ value: key, label }))}
+                      allowEmpty={false}
+                    />
+                  </div>
+
+                  <div className="vagas-form__group">
+                    <label>Tipo de Contrato *</label>
+                    <CustomSelect
+                      value={formData.tipoContrato}
+                      onChange={(val) => setFormData({ ...formData, tipoContrato: val })}
+                      options={Object.entries(CONTRATO_LABELS).map(([key, label]) => ({ value: key, label }))}
+                      allowEmpty={false}
+                    />
+                  </div>
+                </div>
+
+                {editingVaga && (
+                  <div className="vagas-form__group">
+                    <label>Status *</label>
+                    <CustomSelect
+                      value={formData.status}
+                      onChange={(val) => setFormData({ ...formData, status: val })}
+                      options={Object.entries(STATUS_LABELS).map(([key, label]) => ({ value: key, label }))}
+                      allowEmpty={false}
+                    />
+                  </div>
+                )}
+
+                <div className="vagas-form__group">
+                  <label>Descrição da Vaga *</label>
+                  <textarea
+                    value={formData.descricao}
+                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                    placeholder="Descreva as responsabilidades e o dia a dia da vaga..."
+                    rows={4}
+                    required
+                  />
                 </div>
 
                 <div className="vagas-form__group">
-                  <label>Tipo de Contrato *</label>
-                  <select
-                    value={formData.tipoContrato}
-                    onChange={(e) => setFormData({ ...formData, tipoContrato: e.target.value })}
-                  >
-                    {Object.entries(CONTRATO_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
+                  <label>Requisitos *</label>
+                  <textarea
+                    value={formData.requisitos}
+                    onChange={(e) => setFormData({ ...formData, requisitos: e.target.value })}
+                    placeholder="Liste os requisitos separados por linha..."
+                    rows={4}
+                    required
+                  />
+                </div>
+
+                <div className="vagas-form__group">
+                  <label>Benefícios</label>
+                  <textarea
+                    value={formData.beneficios}
+                    onChange={(e) => setFormData({ ...formData, beneficios: e.target.value })}
+                    placeholder="Ex: Vale Transporte, Vale Refeição..."
+                    rows={2}
+                  />
+                </div>
+
+                {formError && <p className="vagas-form__error">{formError}</p>}
+
+                <div className="vagas-form__actions">
+                  <button type="button" className="vagas-form__btn-cancel" onClick={() => setShowFormModal(false)}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className="vagas-form__btn-submit" disabled={submitting}>
+                    {submitting ? 'Salvando...' : (editingVaga ? 'Salvar Alterações' : 'Criar Vaga')}
+                  </button>
+                </div>
+              </form>
+
+              {/* Right Column: Live Preview */}
+              <div className="vagas-modal__preview-col">
+                <h3 style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--color-gray-500)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Prévia da Exibição Pública
+                </h3>
+
+                <div style={{ background: '#fdfdfd', border: '1px solid var(--color-gray-200)', borderRadius: '12px', padding: '16px', pointerEvents: 'none', userSelect: 'none' }}>
+                  {/* Simulated Hero */}
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, #1b1464 0%, #2e3192 100%)', 
+                    padding: '16px', 
+                    borderRadius: '8px', 
+                    color: '#fff',
+                    marginBottom: '16px'
+                  }}>
+                    <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: '4px 0 8px', color: '#fff' }}>
+                      {formData.titulo || 'Título da Vaga'}
+                    </h2>
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'rgba(255,255,255,0.9)' }}>
+                      <span>📍 {formData.unidade || user?.unidade || 'Unidade'}</span>
+                      <span>💼 {MODALIDADE_LABELS[formData.modalidade]} ({CONTRATO_LABELS[formData.tipoContrato]})</span>
+                    </div>
+                  </div>
+
+                  {/* Simulated Details Grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr', gap: '16px' }}>
+                    <div style={{ background: '#fff', border: '1px solid var(--color-gray-100)', borderRadius: '6px', padding: '12px' }}>
+                      <h4 style={{ fontSize: '12px', fontWeight: 'bold', borderBottom: '1.5px solid #1b1464', paddingBottom: '4px', marginBottom: '8px', color: '#1b1464' }}>
+                        Descrição da Vaga
+                      </h4>
+                      <p style={{ fontSize: '11px', lineHeight: '1.5', whiteSpace: 'pre-wrap', color: 'var(--color-gray-700)', marginBottom: '12px' }}>
+                        {formData.descricao || 'Descrição da vaga...'}
+                      </p>
+
+                      <h4 style={{ fontSize: '12px', fontWeight: 'bold', borderBottom: '1.5px solid #1b1464', paddingBottom: '4px', marginBottom: '8px', color: '#1b1464' }}>
+                        Requisitos e Qualificações
+                      </h4>
+                      <ul style={{ paddingLeft: '14px', margin: 0, fontSize: '11px', color: 'var(--color-gray-700)', lineHeight: '1.5' }}>
+                        {(formData.requisitos || '').split('\n').filter(r => r.trim()).length > 0 ? (
+                          (formData.requisitos || '').split('\n').filter(r => r.trim()).map((req, i) => (
+                            <li key={i}>{req}</li>
+                          ))
+                        ) : (
+                          <li style={{ listStyleType: 'none', color: '#999' }}>Requisitos...</li>
+                        )}
+                      </ul>
+
+                      {formData.beneficios && (
+                        <>
+                          <h4 style={{ fontSize: '12px', fontWeight: 'bold', borderBottom: '1.5px solid #1b1464', paddingBottom: '4px', marginBottom: '8px', color: '#1b1464', marginTop: '12px' }}>
+                            Benefícios
+                          </h4>
+                          <p style={{ fontSize: '11px', lineHeight: '1.5', color: 'var(--color-gray-700)' }}>
+                            {formData.beneficios}
+                          </p>
+                        </>
+                      )}
+                    </div>
+
+                    <div style={{ background: '#f8f9fa', border: '1px solid var(--color-gray-100)', borderRadius: '6px', padding: '12px', height: 'fit-content' }}>
+                      <h4 style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '4px', color: '#1b1464' }}>
+                        Candidatar-se
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                        <div style={{ height: '20px', background: '#fff', border: '1px solid #ddd', borderRadius: '3px', padding: '0 6px', fontSize: '9px', color: '#aaa', display: 'flex', alignItems: 'center' }}>Nome</div>
+                        <div style={{ height: '20px', background: '#fff', border: '1px solid #ddd', borderRadius: '3px', padding: '0 6px', fontSize: '9px', color: '#aaa', display: 'flex', alignItems: 'center' }}>E-mail</div>
+                        <div style={{ height: '20px', background: '#fff', border: '1px solid #ddd', borderRadius: '3px', padding: '0 6px', fontSize: '9px', color: '#aaa', display: 'flex', alignItems: 'center' }}>Telefone</div>
+                        <div style={{ height: '30px', background: '#fff', border: '1px dashed #bbb', borderRadius: '3px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: '8px', color: '#666' }}>
+                          <span>Anexar currículo</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div className="vagas-form__group">
-                <label>Descrição da Vaga *</label>
-                <textarea
-                  value={formData.descricao}
-                  onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                  placeholder="Descreva as responsabilidades e o dia a dia da vaga..."
-                  rows={4}
-                  required
-                />
-              </div>
-
-              <div className="vagas-form__group">
-                <label>Requisitos *</label>
-                <textarea
-                  value={formData.requisitos}
-                  onChange={(e) => setFormData({ ...formData, requisitos: e.target.value })}
-                  placeholder="Liste os requisitos separados por linha..."
-                  rows={4}
-                  required
-                />
-              </div>
-
-              <div className="vagas-form__group">
-                <label>Benefícios</label>
-                <textarea
-                  value={formData.beneficios}
-                  onChange={(e) => setFormData({ ...formData, beneficios: e.target.value })}
-                  placeholder="Ex: Vale Transporte, Vale Refeição..."
-                  rows={2}
-                />
-              </div>
-
-              {formError && <p className="vagas-form__error">{formError}</p>}
-
-              <div className="vagas-form__actions">
-                <button type="button" className="vagas-form__btn-cancel" onClick={() => setShowFormModal(false)}>
-                  Cancelar
-                </button>
-                <button type="submit" className="vagas-form__btn-submit" disabled={submitting}>
-                  {submitting ? 'Salvando...' : (editingVaga ? 'Salvar Alterações' : 'Criar Vaga')}
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -410,22 +559,44 @@ export default function VagasPage() {
 
             {activeTab === 'info' ? (
               <div className="vagas-modal__content">
-                <div className="vagas-detail__meta">
-                  <span
-                    className="vaga-card__status"
-                    style={{ backgroundColor: STATUS_COLORS[selectedVaga.status] }}
-                  >
-                    {STATUS_LABELS[selectedVaga.status]}
-                  </span>
+                <div className="vagas-detail__meta" style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-md)', flexWrap: 'wrap' }}>
+                  <div className="vagas-detail__status-select" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--color-gray-600)' }}>Status:</span>
+                    <select
+                      value={selectedVaga.status}
+                      onChange={(e) => handleChangeStatus(selectedVaga, e.target.value)}
+                      style={{
+                        padding: '6px 24px 6px 12px',
+                        borderRadius: '20px',
+                        border: '1px solid var(--color-gray-300)',
+                        backgroundColor: STATUS_COLORS[selectedVaga.status] || 'var(--color-gray-400)',
+                        color: '#fff',
+                        fontWeight: 'bold',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        outline: 'none',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        appearance: 'none',
+                        backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3E%3Cpath fill=\'none\' stroke=\'%23ffffff\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'m2 5 6 6 6-6\'/%3E%3C/svg%3E")',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 8px center',
+                        backgroundSize: '10px'
+                      }}
+                    >
+                      {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                        <option key={key} value={key} style={{ backgroundColor: '#fff', color: 'var(--color-gray-800)' }}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <span>{MODALIDADE_LABELS[selectedVaga.modalidade]} • {CONTRATO_LABELS[selectedVaga.tipoContrato]}</span>
                   <span>Unidade: <strong>{selectedVaga.unidade}</strong></span>
                   <span>Criada em {formatDate(selectedVaga.dataCriacao)}</span>
                 </div>
 
-                <div className="vagas-detail__section">
-                  <h3>Departamento</h3>
-                  <p>{selectedVaga.departamento}</p>
-                </div>
+
 
                 <div className="vagas-detail__section">
                   <h3>Descrição</h3>
@@ -444,45 +615,65 @@ export default function VagasPage() {
                   </div>
                 )}
 
-                {user?.nivel === 'diretora' && (
+                {(user?.nivel === 'diretora' || user?.nivel === 'suporte') && (
                   <div className="vagas-detail__actions">
                     <button className="vagas-form__btn-submit" onClick={() => handleOpenEdit(selectedVaga)}>
                       Editar Vaga
                     </button>
 
-                    {selectedVaga.status === 'aberta' && (
-                      <button
-                        className="vagas-form__btn-cancel"
-                        onClick={() => handleChangeStatus(selectedVaga, 'pausada')}
-                      >
-                        Pausar Vaga
-                      </button>
-                    )}
-
-                    {selectedVaga.status === 'pausada' && (
+                    {selectedVaga.status === 'ativo' && (
                       <>
                         <button
-                          className="vagas-form__btn-submit"
-                          onClick={() => handleChangeStatus(selectedVaga, 'aberta')}
+                          className="vagas-form__btn-cancel"
+                          onClick={() => handleChangeStatus(selectedVaga, 'em_selecao')}
+                          style={{ borderColor: 'var(--color-warning, #f59e0b)', color: 'var(--color-warning, #f59e0b)' }}
                         >
-                          Reabrir Vaga
+                          Iniciar Seleção
                         </button>
                         <button
                           className="vagas-detail__btn-close"
-                          onClick={() => handleChangeStatus(selectedVaga, 'fechada')}
+                          onClick={() => handleChangeStatus(selectedVaga, 'fechado')}
                         >
                           Fechar Vaga
                         </button>
                       </>
                     )}
 
-                    {selectedVaga.status === 'aberta' && (
-                      <button
-                        className="vagas-detail__btn-close"
-                        onClick={() => handleChangeStatus(selectedVaga, 'fechada')}
-                      >
-                        Fechar Vaga
-                      </button>
+                    {selectedVaga.status === 'em_selecao' && (
+                      <>
+                        <button
+                          className="vagas-form__btn-submit"
+                          onClick={() => handleChangeStatus(selectedVaga, 'ativo')}
+                          style={{ backgroundColor: 'var(--color-success, #22c55e)' }}
+                        >
+                          Reabrir Vaga
+                        </button>
+                        <button
+                          className="vagas-detail__btn-close"
+                          onClick={() => handleChangeStatus(selectedVaga, 'fechado')}
+                        >
+                          Fechar Vaga
+                        </button>
+                      </>
+                    )}
+
+                    {selectedVaga.status === 'fechado' && (
+                      <>
+                        <button
+                          className="vagas-form__btn-submit"
+                          onClick={() => handleChangeStatus(selectedVaga, 'ativo')}
+                          style={{ backgroundColor: 'var(--color-success, #22c55e)' }}
+                        >
+                          Reabrir Vaga
+                        </button>
+                        <button
+                          className="vagas-form__btn-cancel"
+                          onClick={() => handleChangeStatus(selectedVaga, 'em_selecao')}
+                          style={{ borderColor: 'var(--color-warning, #f59e0b)', color: 'var(--color-warning, #f59e0b)' }}
+                        >
+                          Mover para Em Seleção
+                        </button>
+                      </>
                     )}
                   </div>
                 )}
